@@ -14,6 +14,7 @@ RUN_INTERVAL = 3600
 MAX_LOG_LINES = 0
 TRIM_LOG_LINES = 0
 DEFAULT_LOG_LINES = 100000
+REMOVE_DUPE_TEMPS = False
 
 LOG_DIR = "./logs/"
 APP_LOG = LOG_DIR + "app.log"
@@ -26,7 +27,12 @@ LOG_FORMAT = '%(asctime)-15s - %(levelname)s - %(message)s'
 # Methods
 ################################################################################
 def update_max_log_globals():
-    global MAX_LOG_LINES, TRIM_LOG_LINES
+    global MAX_LOG_LINES, TRIM_LOG_LINES, REMOVE_DUPE_TEMPS
+    value = cbpi.get_config_parameter("remove_dupe_temps",'No')
+    if value == 'No':
+        REMOVE_DUPE_TEMPS = False 
+    else
+        REMOVE_DUPE_TEMPS = True
     value = int(cbpi.get_config_parameter("max_log_lines", 0))
     if MAX_LOG_LINES != value:
         MAX_LOG_LINES = value
@@ -41,9 +47,10 @@ def init(cbpi):
     # setup max lines parameter for sensor etc logs
     param = cbpi.get_config_parameter("max_log_lines", None)
     if param is None:
-        cbpi.app.logger.info("LogLimiter: create system parameter")
+        cbpi.app.logger.info("LogLimiter: create system parameters")
         try:
             cbpi.add_config_parameter("max_log_lines", DEFAULT_LOG_LINES, "number", "Max Log Lines")
+            cbpi.add_config_parameter("remove_dupe_temps", "No", "select", "Remove redundant temps from log","['Yes','No']")
         except Exception as e:
             cbpi.app.logger.error("LogLimiter: {}".format(e))
     update_max_log_globals()
@@ -66,7 +73,31 @@ def init(cbpi):
 @cbpi.backgroundtask(key="trim_value_logs", interval=RUN_INTERVAL)
 def trim_value_logs(api):
     update_max_log_globals()
+    
+    if REMOVE_DUPE_TEMPS:
+        cbpi.app.logger.info("LogLimiter: Removing dupe temps")
+        
+        log_files = glob(LOG_DIR + "*.log")
+        try: log_files.remove(APP_LOG)
+        except: pass
+        
+        for log_file in log_files:
+            import csv
+            prev_row = [" ","0.0"]
+            with open(log_file, 'rb') as infile:
+                with open(log_file+"tmplog", 'w') as outfile:
+                    reader = csv.reader(infile)
+                    writer = csv.writer(outfile)
+                    for row in reader:
+                        try:
+                            if prev_row[1] != row[1]:
+                                writer.writerow(row)
+                            prev_row = row
+                        except:
+                            pass
+                    writer.writerow(prev_row)
 
+    
     if MAX_LOG_LINES: # skip if zero
         cbpi.app.logger.info("LogLimiter: checking log files")
 
