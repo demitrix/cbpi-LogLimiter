@@ -50,7 +50,13 @@ def init(cbpi):
         cbpi.app.logger.info("LogLimiter: create system parameters")
         try:
             cbpi.add_config_parameter("max_log_lines", DEFAULT_LOG_LINES, "number", "Max Log Lines")
-            cbpi.add_config_parameter("remove_dupe_temps", "No", "select", "Remove redundant temps from log","['Yes','No']")
+        except Exception as e:
+            cbpi.app.logger.error("LogLimiter: {}".format(e))
+    param = cbpi.get_config_parameter("remove_dupe_temps", None)
+    if param is None:
+        cbpi.app.logger.info("LogLimiter: create system parameters")
+        try:
+            cbpi.add_config_parameter("remove_dupe_temps", "NO", "select", "Remove redundant temps from log",["YES","NO"])
         except Exception as e:
             cbpi.app.logger.error("LogLimiter: {}".format(e))
     update_max_log_globals()
@@ -85,7 +91,7 @@ def trim_value_logs(api):
             import csv
             prev_row = [" ","0.0"]
             with open(log_file, 'rb') as infile:
-                with open(log_file+"tmplog", 'w') as outfile:
+                with open(TMP_LOG, 'w') as outfile:
                     reader = csv.reader(infile)
                     writer = csv.writer(outfile)
                     for row in reader:
@@ -96,6 +102,7 @@ def trim_value_logs(api):
                         except:
                             pass
                     writer.writerow(prev_row)
+            rename(TMP_LOG,log_file)
 
     
     if MAX_LOG_LINES: # skip if zero
